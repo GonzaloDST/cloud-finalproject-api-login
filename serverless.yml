@@ -10,7 +10,7 @@ provider:
     role: arn:aws:iam::769530284708:role/LabRole
   environment:
     USUARIOS_TABLE: ${sls:stage}-t_usuarios
-    JWT_SECRET: ${env:JWT_SECRET, 'utec'} 
+    JWT_SECRET: ${env:JWT_SECRET, 'utec'}
 
 functions:
   crearUsuario:
@@ -19,7 +19,7 @@ functions:
       - http:
           path: /auth/registro
           method: post
-          cors: true
+          cors: true  
 
   loginUsuario:
     handler: LoginUsuario.lambda_handler
@@ -42,4 +42,3 @@ resources:
           - AttributeName: email
             KeyType: HASH
         BillingMode: PAY_PER_REQUEST
-
