@@ -1,0 +1,133 @@
+org: gonzalodst
+service: api-usuarios
+
+provider:
+  name: aws
+  runtime: python3.13
+  memorySize: 1024
+  timeout: 20
+  iam:
+    role: arn:aws:iam::769530284708:role/LabRole
+  environment:
+    USUARIOS_TABLE: ${sls:stage}-t_usuarios
+    TOKENS_TABLE: ${sls:stage}-t_tokens_acceso
+    INVITATION_CODES_TABLE: ${sls:stage}-t_invitation_codes
+
+functions:
+  # Lambda para registro de usuarios
+  crearUsuario:
+    handler: CrearUsuario.lambda_handler
+    events:
+      - http:
+          path: /usuarios/registro
+          method: post
+          cors: true
+          integration: lambda
+
+  # Lambda para login de usuarios
+  loginUsuario:
+    handler: LoginUsuario.lambda_handler
+    events:
+      - http:
+          path: /usuarios/login
+          method: post
+          cors: true
+          integration: lambda
+
+  ## Lambda opcional para logout
+  # logoutUsuario:
+  #   handler: LogoutUsuario.lambda_handler
+  #   events:
+  #     - http:
+  #         path: /usuarios/logout
+  #         method: post
+  #         cors: true
+  #         integration: lambda
+
+resources:
+  Resources:
+    # Tabla de usuarios
+    TablaUsuarios:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.USUARIOS_TABLE}
+        AttributeDefinitions:
+          - AttributeName: email
+            AttributeType: S
+          - AttributeName: user_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: email
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdIndex
+            KeySchema:
+              - AttributeName: user_id
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
+
+    # Tabla de tokens de acceso
+    TablaTokens:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TOKENS_TABLE}
+        AttributeDefinitions:
+          - AttributeName: token
+            AttributeType: S
+          - AttributeName: user_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: token
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdIndex
+            KeySchema:
+              - AttributeName: user_id
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
+        TimeToLiveSpecification:
+          AttributeName: expires_at
+          Enabled: true
+
+    # Tabla de códigos de invitación (Falta ver si es implementable)
+    # TablaInvitationCodes:
+    #   Type: AWS::DynamoDB::Table
+    #   Properties:
+    #     TableName: ${self:provider.environment.INVITATION_CODES_TABLE}
+    #     AttributeDefinitions:
+    #       - AttributeName: code
+    #         AttributeType: S
+    #     KeySchema:
+    #       - AttributeName: code
+    #         KeyType: HASH
+    #     BillingMode: PAY_PER_REQUEST
+
+    # Política para permisos de DynamoDB
+    LambdaDynamoDBPolicy:
+      Type: AWS::IAM::Policy
+      Properties:
+        PolicyName: LambdaDynamoDBAuthAccess
+        Roles:
+          - !Ref LabRole
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub "${TablaUsuarios.Arn}"
+                - !Sub "${TablaUsuarios.Arn}/*"
+                - !Sub "${TablaTokens.Arn}"
+                - !Sub "${TablaTokens.Arn}/*"
+                - !Sub "${TablaInvitationCodes.Arn}"
+                - !Sub "${TablaInvitationCodes.Arn}/*"
