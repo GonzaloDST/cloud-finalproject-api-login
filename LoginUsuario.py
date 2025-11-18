@@ -247,23 +247,17 @@ def lambda_handler(event, context):
         
         return {
             'statusCode': 200,
-            'headers': {
-                'Access-Control-Allow-Origin': '*',  # ✅ AGREGAR ESTO
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',  # ✅ AGREGAR ESTO
-                'Access-Control-Allow-Headers': 'Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token',  # ✅ AGREGAR ESTO
-                'Content-Type': 'application/json'
-            },
-            'body': json.dumps(response_data)  # Tu response_data actual
+            'body': response_data
+        }
+
+    except Exception as e:
+        print("Exception in login:", str(e))
+        error_response = {
+            'error': 'Error interno del servidor',
+            'code': 'INTERNAL_ERROR'
         }
         
-    except Exception as e:
         return {
             'statusCode': 500,
-            'headers': {
-                'Access-Control-Allow-Origin': '*',  # ✅ AGREGAR ESTO
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',  # ✅ AGREGAR ESTO
-                'Access-Control-Allow-Headers': 'Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token',  # ✅ AGREGAR ESTO
-                'Content-Type': 'application/json'
-            },
-            'body': json.dumps({'error': 'Internal server error'})
+            'body': error_response
         }
