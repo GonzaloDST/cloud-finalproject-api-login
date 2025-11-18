@@ -1,43 +1,56 @@
 import boto3
 import hashlib
-import uuid
 import json
+import jwt
+import os
 from datetime import datetime, timedelta
 
+# Hashear contraseña
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-def generate_access_token(user_data):
-
-    dynamodb = boto3.resource('dynamodb')
-    table_tokens = dynamodb.Table('t_tokens_acceso')
+# Generar token JWT
+def generate_jwt_token(user_data):
+    JWT_SECRET = os.environ.get('JWT_SECRET', 'utec')
     
-    # Generar token único
-    token = str(uuid.uuid4())
-
-    # Calcular fecha de expiración
-    expires_at = datetime.now() + timedelta(minutes=120)
-    
-    # Crear registro del token
-    ## Tal vez borrar campos
-    token_record = {
-        'token': token,
+    # Payload del token
+    payload = {
         'user_id': user_data.get('user_id'),
         'email': user_data.get('email'),
         'user_type': user_data.get('user_type'),
         'staff_tier': user_data.get('staff_tier'),
         'permissions': user_data.get('permissions', []),
-        'expires_at': expires_at.strftime('%Y-%m-%d %H:%M:%S'),
-        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'is_active': True,
+        'exp': datetime.utcnow() + timedelta(hours=24),  # Expira en 24 horas
+        'iat': datetime.utcnow(),  # Fecha de emisión
         'frontend_type': user_data.get('frontend_type', 'client')
     }
-    table_tokens.put_item(Item=token_record)
-    return token, expires_at
+    
+    # Generar token JWT
+    token = jwt.encode(payload, JWT_SECRET, algorithm='HS256')
+    
+    if isinstance(token, bytes):
+        token = token.decode('utf-8')
+    
+    return token, payload['exp']
+
+# Verificar token JWT
+def verify_jwt_token(token):
+    try:
+        JWT_SECRET = os.environ.get('JWT_SECRET', 'utec')
+        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+        return payload
+    except jwt.ExpiredSignatureError:
+        print("Token expirado")
+        return None
+    except jwt.InvalidTokenError:
+        print("Token inválido")
+        return None
 
 # Función para determinar redirección después del login
 def get_redirect_path(user_type, frontend_type):
-    ## A dónde ir después del login
+    """
+    Determina a dónde redirigir después del login exitoso
+    """
     if user_type == 'staff':
         return '/admin/dashboard'
     else:
@@ -48,11 +61,14 @@ def get_redirect_path(user_type, frontend_type):
 
 # Función principal del Lambda de Login
 def lambda_handler(event, context):
+
     try:
+
+        # Obtener datos directamente del event
         email = event.get('email', '').lower().strip()
         password = event.get('password')
         frontend_type = event.get('frontend_type')  # 'client' o 'staff'
-
+        
         # Validación 1: Campos obligatorios
         if not email or not password:
             return {
@@ -70,7 +86,6 @@ def lambda_handler(event, context):
                     'error': 'frontend_type es requerido y debe ser "client" o "staff"'
                 })
             }
-        
         
         dynamodb = boto3.resource('dynamodb')
         t_usuarios = dynamodb.Table('t_usuarios')
@@ -117,8 +132,6 @@ def lambda_handler(event, context):
                 })
             }
         
-        ## Validación staff o cliente
-        
         user_type = user.get('user_type', 'cliente')
         
         if frontend_type == 'staff':
@@ -151,7 +164,6 @@ def lambda_handler(event, context):
                 }
             
             # Verificar email para clientes
-            ## Comentar si no podemos validar por email
             if not user.get('is_verified', False):
                 return {
                     'statusCode': 403,
@@ -174,9 +186,9 @@ def lambda_handler(event, context):
             )
         except Exception as e:
             print(f"Error updating last login: {str(e)}")
-        
-        ## GENERAR TOKEN
-        
+            
+        ## GENERAR TOKEN JWT
+
         # Preparar datos del usuario para el token
         user_token_data = {
             'user_id': user.get('user_id'),
@@ -187,10 +199,11 @@ def lambda_handler(event, context):
             'frontend_type': frontend_type
         }
         
-        # Generar token
-        token, expires_at = generate_access_token(user_token_data)
+        # Generar token JWT
+        token, expires_at = generate_jwt_token(user_token_data)
 
-        # Datos del usuario para la respuesta (sin información sensible)
+        
+        # Datos del usuario para la respuesta
         user_data = {
             'user_id': user.get('user_id'),
             'email': user.get('email'),
@@ -216,7 +229,7 @@ def lambda_handler(event, context):
             'message': 'Login exitoso',
             'user': user_data,
             'token': token,
-            'token_expires': expires_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'token_expires': expires_at.isoformat(),
             'session': {
                 'logged_in_at': current_time,
                 'frontend_type': frontend_type
@@ -224,7 +237,7 @@ def lambda_handler(event, context):
             'cookie_instructions': {
                 'name': 'auth_token',
                 'value': token,
-                'expires': expires_at.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                'expires': expires_at.isoformat(),
                 'httpOnly': True,
                 'secure': True,
                 'sameSite': 'Strict',

@@ -15,7 +15,7 @@ def validate_staff_tier(tier):
         raise ValueError(f"Tier inválido. Debe ser uno de: {valid_tiers}")
     return tier
 
-# Validar código de invitación para staff
+# Validar código de invitación para  staff
 def validate_invitation_code(code):
     if not code:
         return False
@@ -209,7 +209,7 @@ def lambda_handler(event, context):
             user_item['permissions'] = get_staff_permissions(staff_tier)
             user_item['is_verified'] = True  # Staff verificado por código
         else:
-            user_item['is_verified'] = False  # Clientes requieren verificación por email
+            user_item['is_verified'] = True  # Clientes requieren verificación por email
            
         # Guardar usuario en DynamoDB
         t_usuarios.put_item(Item=user_item)
