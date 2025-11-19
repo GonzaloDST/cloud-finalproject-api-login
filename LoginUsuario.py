@@ -59,31 +59,49 @@ def get_redirect_path(user_type, frontend_type):
         else:
             return '/'
 
+# Headers CORS para todas las respuestas
+CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token, Accept',
+    'Content-Type': 'application/json'
+}
+
 # Función principal del Lambda de Login
 def lambda_handler(event, context):
-
     try:
+        print("Login event received:", json.dumps(event, indent=2))
+        
+        # ✅ CORRECCIÓN: API Gateway envía datos en event['body'] como string
+        if 'body' in event:
+            if isinstance(event['body'], str):
+                body = json.loads(event['body'])
+            else:
+                body = event['body']
+        else:
+            body = event
 
-        # Obtener datos directamente del event
-        email = event.get('email', '').lower().strip()
-        password = event.get('password')
-        frontend_type = event.get('frontend_type')  # 'client' o 'staff'
+        email = body.get('email', '').lower().strip()
+        password = body.get('password')
+        frontend_type = body.get('frontend_type', 'client')  # 'client' o 'staff'
         
         # Validación 1: Campos obligatorios
         if not email or not password:
             return {
                 'statusCode': 400,
+                'headers': CORS_HEADERS,
                 'body': json.dumps({
                     'error': 'Campos obligatorios faltantes: email y password son requeridos'
                 })
             }
         
         # Validación 2: Frontend type
-        if not frontend_type or frontend_type not in ['client', 'staff']:
+        if frontend_type not in ['client', 'staff']:
             return {
                 'statusCode': 400,
+                'headers': CORS_HEADERS,
                 'body': json.dumps({
-                    'error': 'frontend_type es requerido y debe ser "client" o "staff"'
+                    'error': 'frontend_type debe ser "client" o "staff"'
                 })
             }
         
@@ -97,6 +115,7 @@ def lambda_handler(event, context):
                 # No revelar si el usuario existe o no por seguridad
                 return {
                     'statusCode': 401,
+                    'headers': CORS_HEADERS,
                     'body': json.dumps({
                         'error': 'Credenciales inválidas'
                     })
@@ -108,6 +127,7 @@ def lambda_handler(event, context):
             print(f"Error fetching user: {str(e)}")
             return {
                 'statusCode': 500,
+                'headers': CORS_HEADERS,
                 'body': json.dumps({
                     'error': 'Error interno del servidor'
                 })
@@ -118,6 +138,7 @@ def lambda_handler(event, context):
         if hashed_input != user.get('password'):
             return {
                 'statusCode': 401,
+                'headers': CORS_HEADERS,
                 'body': json.dumps({
                     'error': 'Credenciales inválidas'
                 })
@@ -127,6 +148,7 @@ def lambda_handler(event, context):
         if not user.get('is_active', True):
             return {
                 'statusCode': 403,
+                'headers': CORS_HEADERS,
                 'body': json.dumps({
                     'error': 'Cuenta desactivada. Contacta al administrador.'
                 })
@@ -139,6 +161,7 @@ def lambda_handler(event, context):
             if user_type != 'staff':
                 return {
                     'statusCode': 403,
+                    'headers': CORS_HEADERS,
                     'body': json.dumps({
                         'error': 'Acceso denegado. El portal staff es solo para personal autorizado.'
                     })
@@ -148,6 +171,7 @@ def lambda_handler(event, context):
             if not user.get('staff_tier'):
                 return {
                     'statusCode': 403,
+                    'headers': CORS_HEADERS,
                     'body': json.dumps({
                         'error': 'Cuenta de staff incompleta. Contacta al administrador.'
                     })
@@ -158,6 +182,7 @@ def lambda_handler(event, context):
             if user_type == 'staff':
                 return {
                     'statusCode': 403,
+                    'headers': CORS_HEADERS,
                     'body': json.dumps({
                         'error': 'Acceso denegado. El personal debe usar el portal staff.'
                     })
@@ -167,6 +192,7 @@ def lambda_handler(event, context):
             if not user.get('is_verified', False):
                 return {
                     'statusCode': 403,
+                    'headers': CORS_HEADERS,
                     'body': json.dumps({
                         'error': 'Por favor verifica tu email antes de iniciar sesión.',
                         'requires_verification': True
@@ -202,7 +228,6 @@ def lambda_handler(event, context):
         # Generar token JWT
         token, expires_at = generate_jwt_token(user_token_data)
 
-        
         # Datos del usuario para la respuesta
         user_data = {
             'user_id': user.get('user_id'),
@@ -247,7 +272,8 @@ def lambda_handler(event, context):
         
         return {
             'statusCode': 200,
-            'body': response_data
+            'headers': CORS_HEADERS,
+            'body': json.dumps(response_data)
         }
 
     except Exception as e:
@@ -259,5 +285,6 @@ def lambda_handler(event, context):
         
         return {
             'statusCode': 500,
-            'body': error_response
+            'headers': CORS_HEADERS,
+            'body': json.dumps(error_response)
         }
