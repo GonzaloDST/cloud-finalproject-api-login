@@ -11,53 +11,30 @@ def hash_password(password):
 
 # Generar token JWT
 def generate_jwt_token(user_data):
-    JWT_SECRET = os.environ.get('JWT_SECRET', 'utec')
-    
-    # Payload del token
-    payload = {
-        'user_id': user_data.get('user_id'),
-        'email': user_data.get('email'),
-        'user_type': user_data.get('user_type'),
-        'staff_tier': user_data.get('staff_tier'),
-        'permissions': user_data.get('permissions', []),
-        'exp': datetime.utcnow() + timedelta(hours=24),  # Expira en 24 horas
-        'iat': datetime.utcnow(),  # Fecha de emisión
-        'frontend_type': user_data.get('frontend_type', 'client')
-    }
-    
-    # Generar token JWT
-    token = jwt.encode(payload, JWT_SECRET, algorithm='HS256')
-    
-    if isinstance(token, bytes):
-        token = token.decode('utf-8')
-    
-    return token, payload['exp']
-
-# Verificar token JWT
-def verify_jwt_token(token):
     try:
         JWT_SECRET = os.environ.get('JWT_SECRET', 'utec')
-        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
-        return payload
-    except jwt.ExpiredSignatureError:
-        print("Token expirado")
-        return None
-    except jwt.InvalidTokenError:
-        print("Token inválido")
-        return None
-
-# Función para determinar redirección después del login
-def get_redirect_path(user_type, frontend_type):
-    """
-    Determina a dónde redirigir después del login exitoso
-    """
-    if user_type == 'staff':
-        return '/admin/dashboard'
-    else:
-        if frontend_type == 'client':
-            return '/dashboard'
-        else:
-            return '/'
+        
+        # Payload del token
+        payload = {
+            'user_id': user_data.get('user_id'),
+            'email': user_data.get('email'),
+            'user_type': user_data.get('user_type'),
+            'staff_tier': user_data.get('staff_tier'),
+            'permissions': user_data.get('permissions', []),
+            'exp': datetime.utcnow() + timedelta(hours=24),
+            'iat': datetime.utcnow(),
+            'frontend_type': user_data.get('frontend_type', 'client')
+        }
+        
+        # Generar token JWT
+        token = jwt.encode(payload, JWT_SECRET, algorithm='HS256')
+        
+        # En Python 3.10+, jwt.encode retorna string directamente
+        return token, payload['exp']
+        
+    except Exception as e:
+        print(f"Error generating JWT: {str(e)}")
+        raise e
 
 # Headers CORS para todas las respuestas
 CORS_HEADERS = {
@@ -67,12 +44,18 @@ CORS_HEADERS = {
     'Content-Type': 'application/json'
 }
 
+# Función para determinar redirección después del login
+def get_redirect_path(user_type, frontend_type):
+    if user_type == 'staff':
+        return '/admin/dashboard'
+    else:
+        return '/dashboard'
+
 # Función principal del Lambda de Login
 def lambda_handler(event, context):
     try:
         print("Login event received:", json.dumps(event, indent=2))
         
-        # ✅ CORRECCIÓN: API Gateway envía datos en event['body'] como string
         if 'body' in event:
             if isinstance(event['body'], str):
                 body = json.loads(event['body'])
@@ -81,10 +64,11 @@ def lambda_handler(event, context):
         else:
             body = event
 
+        # ✅ Obtener datos del body correctamente
         email = body.get('email', '').lower().strip()
         password = body.get('password')
-        frontend_type = body.get('frontend_type', 'client')  # 'client' o 'staff'
-        
+        frontend_type = body.get('frontend_type', 'client')
+
         # Validación 1: Campos obligatorios
         if not email or not password:
             return {
@@ -94,17 +78,7 @@ def lambda_handler(event, context):
                     'error': 'Campos obligatorios faltantes: email y password son requeridos'
                 })
             }
-        
-        # Validación 2: Frontend type
-        if frontend_type not in ['client', 'staff']:
-            return {
-                'statusCode': 400,
-                'headers': CORS_HEADERS,
-                'body': json.dumps({
-                    'error': 'frontend_type debe ser "client" o "staff"'
-                })
-            }
-        
+
         dynamodb = boto3.resource('dynamodb')
         t_usuarios = dynamodb.Table('t_usuarios')
         
@@ -112,7 +86,6 @@ def lambda_handler(event, context):
         try:
             response = t_usuarios.get_item(Key={'email': email})
             if 'Item' not in response:
-                # No revelar si el usuario existe o no por seguridad
                 return {
                     'statusCode': 401,
                     'headers': CORS_HEADERS,
@@ -156,51 +129,26 @@ def lambda_handler(event, context):
         
         user_type = user.get('user_type', 'cliente')
         
-        if frontend_type == 'staff':
-            # Login desde staff frontend - solo permitir staff
-            if user_type != 'staff':
-                return {
-                    'statusCode': 403,
-                    'headers': CORS_HEADERS,
-                    'body': json.dumps({
-                        'error': 'Acceso denegado. El portal staff es solo para personal autorizado.'
-                    })
-                }
-            
-            # Verificar que staff tenga tier asignado
-            if not user.get('staff_tier'):
-                return {
-                    'statusCode': 403,
-                    'headers': CORS_HEADERS,
-                    'body': json.dumps({
-                        'error': 'Cuenta de staff incompleta. Contacta al administrador.'
-                    })
-                }
-                
-        elif frontend_type == 'client':
-            # Login desde client frontend - solo permitir clientes
-            if user_type == 'staff':
-                return {
-                    'statusCode': 403,
-                    'headers': CORS_HEADERS,
-                    'body': json.dumps({
-                        'error': 'Acceso denegado. El personal debe usar el portal staff.'
-                    })
-                }
-            
-            # Verificar email para clientes
-            if not user.get('is_verified', False):
-                return {
-                    'statusCode': 403,
-                    'headers': CORS_HEADERS,
-                    'body': json.dumps({
-                        'error': 'Por favor verifica tu email antes de iniciar sesión.',
-                        'requires_verification': True
-                    })
-                }
-        
+        # Validaciones de frontend
+        if frontend_type == 'staff' and user_type != 'staff':
+            return {
+                'statusCode': 403,
+                'headers': CORS_HEADERS,
+                'body': json.dumps({
+                    'error': 'Acceso denegado. El portal staff es solo para personal autorizado.'
+                })
+            }
+        elif frontend_type == 'client' and user_type == 'staff':
+            return {
+                'statusCode': 403,
+                'headers': CORS_HEADERS,
+                'body': json.dumps({
+                    'error': 'Acceso denegado. El personal debe usar el portal staff.'
+                })
+            }
+
+        # Actualizar último login
         current_time = datetime.utcnow().isoformat()
-        
         try:
             t_usuarios.update_item(
                 Key={'email': email},
@@ -212,10 +160,8 @@ def lambda_handler(event, context):
             )
         except Exception as e:
             print(f"Error updating last login: {str(e)}")
-            
-        ## GENERAR TOKEN JWT
-
-        # Preparar datos del usuario para el token
+        
+        # Generar token JWT
         user_token_data = {
             'user_id': user.get('user_id'),
             'email': user.get('email'),
@@ -225,20 +171,19 @@ def lambda_handler(event, context):
             'frontend_type': frontend_type
         }
         
-        # Generar token JWT
         token, expires_at = generate_jwt_token(user_token_data)
 
-        # Datos del usuario para la respuesta
+        # Preparar respuesta
         user_data = {
             'user_id': user.get('user_id'),
             'email': user.get('email'),
             'name': user.get('name'),
             'user_type': user_type,
             'is_active': user.get('is_active', True),
-            'last_login': current_time
+            'last_login': current_time,
+            'redirect_to': get_redirect_path(user_type, frontend_type)
         }
         
-        # Agregar información específica por tipo de usuario
         if user_type == 'staff':
             user_data['staff_tier'] = user.get('staff_tier')
             user_data['permissions'] = user.get('permissions', [])
@@ -246,27 +191,14 @@ def lambda_handler(event, context):
         else:
             user_data['is_verified'] = user.get('is_verified', False)
         
-        # Determinar redirección
-        redirect_path = get_redirect_path(user_type, frontend_type)
-        user_data['redirect_to'] = redirect_path
-        
         response_data = {
             'message': 'Login exitoso',
             'user': user_data,
             'token': token,
-            'token_expires': expires_at.isoformat(),
+            'token_expires': expires_at.isoformat() if hasattr(expires_at, 'isoformat') else expires_at,
             'session': {
                 'logged_in_at': current_time,
                 'frontend_type': frontend_type
-            },
-            'cookie_instructions': {
-                'name': 'auth_token',
-                'value': token,
-                'expires': expires_at.isoformat(),
-                'httpOnly': True,
-                'secure': True,
-                'sameSite': 'Strict',
-                'path': '/'
             }
         }
         
@@ -278,13 +210,14 @@ def lambda_handler(event, context):
 
     except Exception as e:
         print("Exception in login:", str(e))
-        error_response = {
-            'error': 'Error interno del servidor',
-            'code': 'INTERNAL_ERROR'
-        }
+        import traceback
+        print("Traceback:", traceback.format_exc())
         
         return {
             'statusCode': 500,
             'headers': CORS_HEADERS,
-            'body': json.dumps(error_response)
+            'body': json.dumps({
+                'error': 'Internal server error',
+                'details': str(e)
+            })
         }
