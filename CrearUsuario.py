@@ -21,7 +21,8 @@ def validate_invitation_code(code):
         return False
         
     dynamodb = boto3.resource('dynamodb')
-    table = dynamodb.Table('t_invitation_codes')
+    usuarios_table_name = os.environ.get('USUARIOS_TABLE', 't_usuarios')
+    table = dynamodb.Table(usuarios_table_name)
     
     try:
         response = table.get_item(Key={'code': code})
@@ -193,7 +194,8 @@ def lambda_handler(event, context):
             staff_tier = None
         
         dynamodb = boto3.resource('dynamodb')
-        t_usuarios = dynamodb.Table('t_usuarios')
+        usuarios_table_name = os.environ.get('USUARIOS_TABLE', 't_usuarios')
+        t_usuarios = dynamodb.Table(usuarios_table_name)
         
         # Verificar si el email ya está registrado
         try:

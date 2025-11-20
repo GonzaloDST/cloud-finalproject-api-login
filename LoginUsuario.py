@@ -80,7 +80,8 @@ def lambda_handler(event, context):
             }
 
         dynamodb = boto3.resource('dynamodb')
-        t_usuarios = dynamodb.Table('t_usuarios')
+        usuarios_table_name = os.environ.get('USUARIOS_TABLE', 't_usuarios')
+        t_usuarios = dynamodb.Table(usuarios_table_name)
         
         # Buscar usuario por email
         try:
