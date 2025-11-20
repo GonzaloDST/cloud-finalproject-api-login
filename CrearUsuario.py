@@ -33,16 +33,38 @@ def validate_invitation_code(code):
             item = response['Item']
             
             # Verificar que esté activo y no haya expirado
+            # Parsear expires_at de manera segura
+            try:
+                expires_at_str = item.get('expires_at')
+                if not expires_at_str:
+                    return False
+                expires_at = datetime.fromisoformat(expires_at_str)
+            except Exception as e:
+                print(f"Error parsing expires_at for code {code}: {e}")
+                return False
+
+            try:
+                used_count = int(item.get('used_count', 0))
+                max_uses = int(item.get('max_uses', 1))
+            except Exception:
+                used_count = 0
+                max_uses = 1
+
             if (item.get('is_active', False) and 
-                datetime.fromisoformat(item['expires_at']) > datetime.utcnow() and
-                item.get('used_count', 0) < item.get('max_uses', 1)):
-                
-                # Incrementar contador de usos
-                table.update_item(
-                    Key={'code': code},
-                    UpdateExpression='SET used_count = used_count + :inc',
-                    ExpressionAttributeValues={':inc': 1}
-                )
+                expires_at > datetime.utcnow() and
+                used_count < max_uses):
+
+                # Incrementar contador de usos de forma segura (si no existe, asumir 0)
+                try:
+                    table.update_item(
+                        Key={'code': code},
+                        UpdateExpression='SET used_count = if_not_exists(used_count, :zero) + :inc',
+                        ExpressionAttributeValues={':inc': 1, ':zero': 0}
+                    )
+                except Exception as e:
+                    print(f"Error updating used_count for code {code}: {str(e)}")
+                    return False
+
                 return True
         return False
     except Exception as e:
