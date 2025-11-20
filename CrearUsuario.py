@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 import json
 import os
+import traceback  
 
 # Hashear contraseña
 def hash_password(password):
