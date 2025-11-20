@@ -29,7 +29,6 @@ def generate_jwt_token(user_data):
         # Generar token JWT
         token = jwt.encode(payload, JWT_SECRET, algorithm='HS256')
         
-        # En Python 3.10+, jwt.encode retorna string directamente
         return token, payload['exp']
         
     except Exception as e:
@@ -44,11 +43,14 @@ CORS_HEADERS = {
     'Content-Type': 'application/json'
 }
 
-# Función para determinar redirección después del login
-def get_redirect_path(user_type, frontend_type):
+# Función para determinar redirección después del login (MODIFICADA)
+def get_redirect_path(user_type, staff_tier, frontend_type):
     if user_type == 'staff':
-        return '/admin/dashboard'
-    else:
+        if staff_tier == 'admin':
+            return '/admin/dashboard'
+        else:  # trabajador
+            return '/trabajador/pedidos'
+    else:  # cliente
         return '/dashboard'
 
 # Función principal del Lambda de Login
@@ -80,7 +82,7 @@ def lambda_handler(event, context):
             }
 
         dynamodb = boto3.resource('dynamodb')
-        usuarios_table_name = os.environ.get('USUARIOS_TABLE', 't_usuarios')
+        usuarios_table_name = os.environ.get('USUARIOS_TABLE', 'dev-t_usuarios')
         t_usuarios = dynamodb.Table(usuarios_table_name)
         
         # Buscar usuario por email
@@ -129,6 +131,7 @@ def lambda_handler(event, context):
             }
         
         user_type = user.get('user_type', 'cliente')
+        staff_tier = user.get('staff_tier')
         
         # Validaciones de frontend
         if frontend_type == 'staff' and user_type != 'staff':
@@ -167,7 +170,7 @@ def lambda_handler(event, context):
             'user_id': user.get('user_id'),
             'email': user.get('email'),
             'user_type': user_type,
-            'staff_tier': user.get('staff_tier'),
+            'staff_tier': staff_tier,
             'permissions': user.get('permissions', []),
             'frontend_type': frontend_type
         }
@@ -182,11 +185,11 @@ def lambda_handler(event, context):
             'user_type': user_type,
             'is_active': user.get('is_active', True),
             'last_login': current_time,
-            'redirect_to': get_redirect_path(user_type, frontend_type)
+            'redirect_to': get_redirect_path(user_type, staff_tier, frontend_type)  # MODIFICADO
         }
         
         if user_type == 'staff':
-            user_data['staff_tier'] = user.get('staff_tier')
+            user_data['staff_tier'] = staff_tier
             user_data['permissions'] = user.get('permissions', [])
             user_data['is_verified'] = user.get('is_verified', True)
         else:

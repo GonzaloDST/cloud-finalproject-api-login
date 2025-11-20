@@ -46,6 +46,13 @@ functions:
           path: /auth/login
           method: post
 
+  logoutUsuario:  # NUEVO
+    handler: LogoutUsuario.lambda_handler
+    events:
+      - http:
+          path: /auth/logout
+          method: post
+
 resources:
   Resources:
     TablaUsuarios:

@@ -4,15 +4,15 @@ import uuid
 from datetime import datetime
 import json
 import os
-import traceback  
+import traceback
 
 # Hashear contraseña
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-# Validar y asignar tier de staff
+# Validar y asignar tier de staff (MODIFICADO)
 def validate_staff_tier(tier):
-    valid_tiers = ['basic', 'gerente']
+    valid_tiers = ['admin', 'trabajador']  # CAMBIADO: 'basic', 'gerente' -> 'admin', 'trabajador'
     if tier not in valid_tiers:
         raise ValueError(f"Tier inválido. Debe ser uno de: {valid_tiers}")
     return tier
@@ -23,8 +23,7 @@ def validate_invitation_code(code):
         return False
         
     dynamodb = boto3.resource('dynamodb')
-    usuarios_table_name = os.environ.get('USUARIOS_TABLE', 't_usuarios')
-    table = dynamodb.Table(usuarios_table_name)
+    table = dynamodb.Table('dev-t_invitation_codes')
     
     try:
         response = table.get_item(Key={'code': code})
@@ -48,24 +47,24 @@ def validate_invitation_code(code):
         print(f"Error validating invitation code: {str(e)}")
         return False
 
-# Asignar permisos basados en el tier de staff
+# Asignar permisos basados en el tier de staff (MODIFICADO)
 def get_staff_permissions(tier):
     permissions = {
-        'basic': [
+        'trabajador': [  # CAMBIADO: 'basic' -> 'trabajador'
             'view_products',
             'view_orders', 
             'update_order_status',
             'view_customers',
             'manage_own_profile'
         ],
-        'gerente': [
+        'admin': [  # CAMBIADO: 'gerente' -> 'admin'
             'view_products',
             'view_orders',
             'update_order_status', 
             'view_customers',
             'manage_products',
             'manage_orders',
-            'manage_staff_basic',
+            'manage_staff_trabajador',  # CAMBIADO: 'manage_staff_basic' -> 'manage_staff_trabajador'
             'view_reports',
             'manage_inventory',
             'generate_invitation_codes',
@@ -104,10 +103,10 @@ def lambda_handler(event, context):
         email = body.get('email', '').lower().strip() 
         phone = body.get('phone')
         gender = body.get('gender')
-        user_type = body.get('user_type', 'cliente')  # Default a cliente
+        user_type = body.get('user_type', 'cliente')
         staff_tier = body.get('staff_tier')
         invitation_code = body.get('invitation_code')
-        frontend_type = body.get('frontend_type', 'client')  # Identificar frontend
+        frontend_type = body.get('frontend_type', 'client')
 
         # Validación 1: Campos obligatorios
         if not email or not password:
@@ -196,7 +195,7 @@ def lambda_handler(event, context):
             staff_tier = None
         
         dynamodb = boto3.resource('dynamodb')
-        usuarios_table_name = os.environ.get('USUARIOS_TABLE', 't_usuarios')
+        usuarios_table_name = os.environ.get('USUARIOS_TABLE', 'dev-t_usuarios')
         t_usuarios = dynamodb.Table(usuarios_table_name)
         
         # Verificar si el email ya está registrado
@@ -219,7 +218,7 @@ def lambda_handler(event, context):
         
         # Crear el item completo 
         user_item = {
-            'user_id': str(uuid.uuid4()),  # ID único universal
+            'user_id': str(uuid.uuid4()),
             'email': email,
             'password': hashed_password,  
             'name': name,
@@ -230,16 +229,16 @@ def lambda_handler(event, context):
             'updated_at': current_time,    
             'is_active': True,             
             'last_login': None,            
-            'registration_source': frontend_type  # 'client' o 'staff'
+            'registration_source': frontend_type
         }
         
         # Agregar campos específicos de staff
         if user_type == 'staff':
             user_item['staff_tier'] = staff_tier
             user_item['permissions'] = get_staff_permissions(staff_tier)
-            user_item['is_verified'] = True  # Staff verificado por código
+            user_item['is_verified'] = True
         else:
-            user_item['is_verified'] = True  # Clientes requieren verificación por email
+            user_item['is_verified'] = True
            
         # Guardar usuario en DynamoDB
         t_usuarios.put_item(Item=user_item)
@@ -265,7 +264,7 @@ def lambda_handler(event, context):
             response_data['is_verified'] = True
         
         return {
-            'statusCode': 201,  # 201 Created para recursos nuevos
+            'statusCode': 201,
             'headers': CORS_HEADERS,
             'body': json.dumps(response_data)
         }
