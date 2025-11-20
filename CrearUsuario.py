@@ -21,10 +21,11 @@ def validate_staff_tier(tier):
 def validate_invitation_code(code):
     if not code:
         return False
-    else: ## HARDCODED PORQUE NO HE CREADO TABLA INVT CODE
-        return True
+        
     dynamodb = boto3.resource('dynamodb')
-    table = dynamodb.Table('dev-t_invitation_codes')
+    # Usar variable de entorno para el nombre de la tabla
+    invitation_table_name = os.environ.get('INVITATION_CODES_TABLE', 'dev-t_invitation_codes')
+    table = dynamodb.Table(invitation_table_name)
     
     try:
         response = table.get_item(Key={'code': code})

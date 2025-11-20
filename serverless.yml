@@ -18,6 +18,7 @@ provider:
     role: arn:aws:iam::389752090540:role/LabRole
   environment:
     USUARIOS_TABLE: ${sls:stage}-t_usuarios
+    INVITATION_CODES_TABLE: ${sls:stage}-t_invitation_codes
     JWT_SECRET: ${env:JWT_SECRET, 'utec'}
 
 package:
@@ -46,11 +47,18 @@ functions:
           path: /auth/login
           method: post
 
-  logoutUsuario:  # NUEVO
+  logoutUsuario:
     handler: LogoutUsuario.lambda_handler
     events:
       - http:
           path: /auth/logout
+          method: post
+
+  generarInvitationCode:  
+    handler: GenerarInvitationCode.lambda_handler
+    events:
+      - http:
+          path: /auth/generate-invitation
           method: post
 
 resources:
@@ -66,3 +74,18 @@ resources:
           - AttributeName: email
             KeyType: HASH
         BillingMode: PAY_PER_REQUEST
+
+    TablaInvitationCodes:  
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.INVITATION_CODES_TABLE}
+        AttributeDefinitions:
+          - AttributeName: code
+            AttributeType: S
+        KeySchema:
+          - AttributeName: code
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true

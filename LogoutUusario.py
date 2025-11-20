@@ -1,7 +1,6 @@
 import json
-import os
+from datetime import datetime
 
-# Headers CORS para todas las respuestas
 CORS_HEADERS = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
@@ -10,15 +9,13 @@ CORS_HEADERS = {
 }
 
 def lambda_handler(event, context):
-    """
-    Maneja el logout de usuarios - principalmente para limpieza en el cliente
-    """
     try:
         print("Logout event received:", json.dumps(event, indent=2))
         
         response_data = {
-            'message': 'Logout exitoso',
-            'timestamp': datetime.utcnow().isoformat()
+            'message': 'Sesión cerrada exitosamente',
+            'timestamp': datetime.utcnow().isoformat(),
+            'note': 'Token eliminado del cliente. El token JWT seguirá siendo válido hasta su expiración natural.'
         }
         
         return {
@@ -29,12 +26,14 @@ def lambda_handler(event, context):
 
     except Exception as e:
         print("Exception in logout:", str(e))
+        import traceback
+        print("Traceback:", traceback.format_exc())
         
         return {
             'statusCode': 500,
             'headers': CORS_HEADERS,
             'body': json.dumps({
                 'error': 'Error interno del servidor',
-                'code': 'INTERNAL_ERROR'
+                'details': str(e)
             })
         }
