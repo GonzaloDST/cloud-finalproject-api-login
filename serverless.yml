@@ -1,6 +1,14 @@
 org: gonzalodst
 service: api-auth
 
+plugins:
+  - serverless-python-requirements
+
+custom:
+  pythonRequirements:
+    dockerizePip: true
+    slim: true
+
 provider:
   name: aws
   runtime: python3.13
@@ -11,6 +19,17 @@ provider:
   environment:
     USUARIOS_TABLE: ${sls:stage}-t_usuarios
     JWT_SECRET: ${env:JWT_SECRET, 'utec'}
+
+package:
+  patterns:
+    - "!./**"
+    - "*.py"
+    - "requirements.txt"
+    - "!package.json"
+    - "!node_modules/**"
+    - "!venv/**"
+    - "!test/**"
+    - "!.git/**"
 
 functions:
   crearUsuario:
